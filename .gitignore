@@ -1,0 +1,11 @@
+**/.env
+**/.env.*
+!**/.env.example
+**/__pycache__/
+**/*.py[cod]
+**/*.db
+**/*.tsbuildinfo
+**/node_modules/
+**/dist/
+.venv/
+venv/
