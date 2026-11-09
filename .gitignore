@@ -1,11 +1,24 @@
-**/.env
-**/.env.*
-!**/.env.example
-**/__pycache__/
-**/*.py[cod]
-**/*.db
-**/*.tsbuildinfo
-**/node_modules/
-**/dist/
+# Ignore actual environment files
+.env
+.env.*
+!.env.example
+
+# Python
 .venv/
 venv/
+__pycache__/
+
+# Node
+node_modules/
+dist/
+
+# Logs
+*.log
+# TypeScript cache
+*.tsbuildinfo
+
+# Ignore databases by default
+*.db
+*.sqlite
+*.sqlite3
+!backend/sarthi.db
