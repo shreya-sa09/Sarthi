@@ -16,6 +16,7 @@ class DeliveryRun(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     rider_name: Mapped[str] = mapped_column(String(120), default="Arjun")
     status: Mapped[str] = mapped_column(String(20), default="active")
+    is_demo: Mapped[bool] = mapped_column(default=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     stops: Mapped[list["DeliveryStop"]] = relationship(back_populates="run", cascade="all, delete-orphan", order_by="DeliveryStop.sequence")
     activities: Mapped[list["Activity"]] = relationship(back_populates="run", cascade="all, delete-orphan", order_by="Activity.created_at")
@@ -32,10 +33,21 @@ class DeliveryStop(Base):
     customer_phone: Mapped[str] = mapped_column(String(32), default="")
     address: Mapped[str] = mapped_column(String(300))
     access_note: Mapped[str] = mapped_column(String(300), default="")
+    parcel_description: Mapped[str] = mapped_column(String(180), default="")
+    package_category: Mapped[str] = mapped_column(String(40), default="")
+    weight_kg: Mapped[float | None] = mapped_column(nullable=True)
+    payment_type: Mapped[str] = mapped_column(String(20), default="prepaid")
+    cod_amount: Mapped[int | None] = mapped_column(nullable=True)
+    delivery_window: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True)
     exception_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
     otp_code: Mapped[str | None] = mapped_column(String(12), nullable=True)
     run: Mapped[DeliveryRun] = relationship(back_populates="stops")
+
+    @property
+    def otp_length(self) -> int:
+        """Expose the required digit count without exposing the verification code."""
+        return len(self.otp_code or "")
 
 
 class Activity(Base):

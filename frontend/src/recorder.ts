@@ -33,7 +33,15 @@ function toWav(chunks: Float32Array[], rate: number): Blob {
   return new Blob([buffer], { type: 'audio/wav' })
 }
 
-export async function beginRecording() {
+export type RecordingOptions = {
+  autoStop?: boolean
+  silenceMs?: number
+  noSpeechMs?: number
+  maxDurationMs?: number
+  onAutoStop?: (reason: 'silence' | 'no-speech' | 'maximum') => void
+}
+
+export async function beginRecording(options: RecordingOptions = {}) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
   const context = new AudioContext()
   const source = context.createMediaStreamSource(stream)
@@ -41,18 +49,50 @@ export async function beginRecording() {
   const silent = context.createGain()
   silent.gain.value = 0
   const chunks: Float32Array[] = []
-  processor.onaudioprocess = (event) => chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)))
+  const startedAt = Date.now()
+  let speechAt = 0
+  let stopped = false
+  let autoStopFired = false
+  let timer = 0
+  const stopTimer = () => window.clearInterval(timer)
+  processor.onaudioprocess = (event) => {
+    if (stopped) return
+    const frame = new Float32Array(event.inputBuffer.getChannelData(0))
+    chunks.push(frame)
+    if (!options.autoStop || autoStopFired) return
+    let energy = 0
+    for (let i = 0; i < frame.length; i++) energy += frame[i] * frame[i]
+    const rms = Math.sqrt(energy / Math.max(frame.length, 1))
+    if (rms > 0.015) speechAt = Date.now()
+  }
   source.connect(processor); processor.connect(silent); silent.connect(context.destination)
 
+  if (options.autoStop) timer = window.setInterval(() => {
+    if (stopped || autoStopFired) return
+    const elapsed = Date.now() - startedAt
+    const reason = elapsed >= (options.maxDurationMs ?? 15000) ? 'maximum'
+      : speechAt > 0 && Date.now() - speechAt >= (options.silenceMs ?? 1100) ? 'silence'
+        : speechAt === 0 && elapsed >= (options.noSpeechMs ?? 6000) ? 'no-speech' : null
+    if (reason) { autoStopFired = true; stopTimer(); options.onAutoStop?.(reason) }
+  }, 200)
+
   let finished = false
+  const close = async () => {
+    if (finished) return
+    finished = true
+    stopped = true
+    stopTimer()
+    processor.disconnect(); source.disconnect(); silent.disconnect()
+    stream.getTracks().forEach((track) => track.stop())
+    await context.close()
+  }
   return {
     stop: async () => {
       if (finished) return new Blob([], { type: 'audio/wav' })
-      finished = true
-      processor.disconnect(); source.disconnect(); silent.disconnect()
-      stream.getTracks().forEach((track) => track.stop())
-      await context.close()
-      return toWav(chunks, context.sampleRate)
+      const rate = context.sampleRate
+      await close()
+      return toWav(chunks, rate)
     },
+    cancel: close,
   }
 }

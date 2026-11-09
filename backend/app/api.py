@@ -16,13 +16,16 @@ ACTION_TEXT = {
 }
 
 
-def get_active_run(db: Session) -> DeliveryRun:
-    run = db.scalar(
+def get_active_run(db: Session, *, lock: bool = False) -> DeliveryRun:
+    statement = (
         select(DeliveryRun)
         .where(DeliveryRun.status == "active")
         .options(selectinload(DeliveryRun.stops), selectinload(DeliveryRun.activities))
         .order_by(DeliveryRun.id.desc())
     )
+    if lock:
+        statement = statement.with_for_update()
+    run = db.scalar(statement)
     if run is None:
         raise HTTPException(status_code=404, detail="No active delivery run")
     return run
@@ -35,10 +38,17 @@ def active_run(db: Session = Depends(get_db)) -> DeliveryRun:
 
 @router.patch("/stops/{stop_id}/contact", response_model=RunView)
 def save_stop_contact(stop_id: int, body: StopContact, db: Session = Depends(get_db)) -> DeliveryRun:
-    run = get_active_run(db)
-    stop = db.scalar(select(DeliveryStop).where(DeliveryStop.id == stop_id, DeliveryStop.run_id == run.id))
+    run = get_active_run(db, lock=True)
+    stop = db.scalar(
+        select(DeliveryStop)
+        .where(DeliveryStop.id == stop_id, DeliveryStop.run_id == run.id)
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
     if stop is None:
         raise HTTPException(status_code=404, detail="Stop not found in the active run")
+    if stop.status == "delivered":
+        raise HTTPException(status_code=409, detail="This stop is already complete")
     stop.customer_phone = body.phone.strip()
     db.add(Activity(run_id=run.id, stop_id=stop.id, event_type="contact_saved", summary="Customer contact number saved"))
     db.commit()
@@ -48,12 +58,30 @@ def save_stop_contact(stop_id: int, body: StopContact, db: Session = Depends(get
 
 @router.post("/stops/{stop_id}/actions", response_model=RunView)
 def apply_stop_action(stop_id: int, body: StopAction, db: Session = Depends(get_db)) -> DeliveryRun:
-    run = get_active_run(db)
-    stop = db.scalar(select(DeliveryStop).where(DeliveryStop.id == stop_id, DeliveryStop.run_id == run.id))
+    run = get_active_run(db, lock=True)
+    stop = db.scalar(
+        select(DeliveryStop)
+        .where(DeliveryStop.id == stop_id, DeliveryStop.run_id == run.id)
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
     if stop is None:
         raise HTTPException(status_code=404, detail="Stop not found in the active run")
     if stop.status == "delivered":
         raise HTTPException(status_code=409, detail="This stop is already complete")
+
+    if stop.status == "exception":
+        if body.action == stop.exception_reason:
+            # A retry of the same action is safe and must not create another event.
+            return run
+        if body.action != "delivered":
+            raise HTTPException(
+                status_code=409,
+                detail="An exception stop can only be completed with delivery verification",
+            )
+    elif stop.status != "pending":
+        raise HTTPException(status_code=409, detail="This stop cannot be updated from its current status")
+
     if body.action == "delivered":
         if not stop.otp_code:
             raise HTTPException(status_code=409, detail="This stop has no configured verification code")

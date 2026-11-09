@@ -13,8 +13,15 @@ class StopView(BaseModel):
     customer_phone: str
     address: str
     access_note: str
+    parcel_description: str
+    package_category: str
+    weight_kg: float | None
+    payment_type: str
+    cod_amount: int | None
+    delivery_window: str | None
     status: str
     exception_reason: str | None
+    otp_length: int
 
 
 class ActivityView(BaseModel):
@@ -31,6 +38,7 @@ class RunView(BaseModel):
     id: int
     rider_name: str
     status: str
+    is_demo: bool
     started_at: datetime
     stops: list[StopView]
     activities: list[ActivityView]
