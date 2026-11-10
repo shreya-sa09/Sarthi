@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.8-flash"
     frontend_origin: str = "http://localhost:5173"
-    routing_provider: str = "graphhopper"
     graphhopper_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=Path(__file__).resolve().parent.parent / ".env", extra="ignore")

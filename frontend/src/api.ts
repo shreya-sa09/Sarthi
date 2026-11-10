@@ -41,7 +41,6 @@ export type Run = {
   id: number
   rider_name: string
   status: string
-  is_demo: boolean
   started_at: string
   stops: Stop[]
   activities: Activity[]

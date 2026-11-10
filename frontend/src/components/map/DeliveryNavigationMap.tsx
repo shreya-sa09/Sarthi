@@ -11,7 +11,6 @@ type NavigationState = 'loading-map' | 'locating' | 'calculating' | 'active' | '
 export type NavigationCommand = { action: 'pause' | 'resume' | 'repeat'; requestId: number } | null
 export type NavigationSnapshot = { state: NavigationState; instruction: string; metersRemaining: number | null }
 type Position = GeoPoint & { accuracy: number; heading: number | null; speed: number | null }
-const DEMO_ORIGIN: GeoPoint = { latitude: 18.5018, longitude: 73.8636 } // Swargate, Pune
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 const distanceBetween = (a: GeoPoint, b: GeoPoint) => {
@@ -90,8 +89,6 @@ export function DeliveryNavigationMap({ stop, autoStart, stopSignal, command, la
   const [distanceToTurn, setDistanceToTurn] = useState<number | null>(null)
   const [accuracy, setAccuracy] = useState<number | null>(null)
   const [muted, setMuted] = useState(false)
-  const [demoLocation, setDemoLocation] = useState(true)
-  const [demoInstructionIndex, setDemoInstructionIndex] = useState(0)
   const [follow, setFollow] = useState(true)
   const [headingUp, setHeadingUp] = useState(true)
   const [message, setMessage] = useState('')
@@ -180,7 +177,6 @@ export function DeliveryNavigationMap({ stop, autoStart, stopSignal, command, la
         routeProgress.current.push(routeProgress.current[i - 1] + distanceBetween({ latitude: previousLat, longitude: previousLng }, { latitude: lat, longitude: lng }))
       }
       currentStep.current = 0
-      setDemoInstructionIndex(0)
       announced.current.clear()
       deviationCount.current = 0
       lastRecalculation.current = Date.now()
@@ -193,17 +189,7 @@ export function DeliveryNavigationMap({ stop, autoStart, stopSignal, command, la
       setNavigationState('active')
       setFollow(true)
       setHeadingUp(true)
-      if (demoLocation) {
-        const demoPosition: Position = { ...origin, accuracy: 0, heading: null, speed: null }
-        lastPosition.current = demoPosition
-        setAccuracy(0)
-        const dot = document.createElement('div'); dot.className = 'navigation-rider-marker'; dot.setAttribute('aria-label', 'Simulated rider start in Pune')
-        riderMarker.current?.remove()
-        riderMarker.current = new Marker({ element: dot, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat([origin.longitude, origin.latitude]).addTo(map.current!)
-        setMessage('Demo route starts at Swargate, Pune. Use “Next demo direction” to advance simulated turns.')
-      } else {
-        setMessage('Route calculated from your current GPS location. Keep Sarthi open for live guidance.')
-      }
+      setMessage('Route calculated from your current GPS location. Keep Sarthi open for live guidance.')
       if (initial) {
         navigationStartedRef.current(first, result.distance_m)
       }
@@ -212,23 +198,18 @@ export function DeliveryNavigationMap({ stop, autoStart, stopSignal, command, la
       const detail = error instanceof Error ? error.message : 'Route calculation failed. Please retry.'
       setNavigationState('error'); setMessage(detail); navigationErrorRef.current(detail)
     }
-  }, [demoLocation, language, renderRoute])
+  }, [language, renderRoute])
 
   const startNavigation = useCallback(() => {
     if (!destinationReady || !destination.current) {
       const detail = 'The selected delivery address has not been located. Review the saved address and retry.'
       setMessage(detail); setNavigationState('error'); navigationErrorRef.current(detail); return
     }
-    if (!demoLocation && !navigator.geolocation) {
+    if (!navigator.geolocation) {
       const detail = 'This browser does not support GPS location. In-app route guidance needs location access.'
       setMessage(detail); setNavigationState('error'); navigationErrorRef.current(detail); return
     }
     const requestId = ++routeRequest.current
-    if (demoLocation) {
-      setNavigationState('calculating'); setMessage('Starting demo navigation from Swargate, Pune…')
-      void calculateRoute(DEMO_ORIGIN, true, requestId)
-      return
-    }
     setNavigationState('locating'); setMessage('Requesting your current GPS location…')
     navigator.geolocation.getCurrentPosition((position) => {
       if (requestId !== routeRequest.current) return
@@ -242,7 +223,7 @@ export function DeliveryNavigationMap({ stop, autoStart, stopSignal, command, la
       const detail = error.code === error.PERMISSION_DENIED ? 'Location permission was denied. Enable location access in browser settings and retry.' : error.code === error.TIMEOUT ? 'GPS took too long to respond. Try again in a clearer area.' : 'Current GPS location is unavailable.'
       setMessage(detail); setNavigationState('error'); navigationErrorRef.current(detail)
     }, { enableHighAccuracy: true, timeout: 18000, maximumAge: 0 })
-  }, [calculateRoute, demoLocation, destinationReady])
+  }, [calculateRoute, destinationReady])
 
   const startRef = useRef(startNavigation)
   startRef.current = startNavigation
@@ -349,13 +330,12 @@ export function DeliveryNavigationMap({ stop, autoStart, stopSignal, command, la
 
   useEffect(() => {
     if (navigationState !== 'active' && navigationState !== 'paused') return
-    if (demoLocation) return
     if (!navigator.geolocation) return
     watchId.current = navigator.geolocation.watchPosition(updatePosition, (error) => {
       setMessage(error.code === error.PERMISSION_DENIED ? 'GPS permission was revoked. Enable location access to continue guidance.' : 'GPS updates are temporarily unavailable. Check your location signal.')
     }, { enableHighAccuracy: true, maximumAge: 1500, timeout: 12000 })
     return () => { if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current); watchId.current = null }
-  }, [demoLocation, navigationState, updatePosition])
+  }, [navigationState, updatePosition])
 
   const endNavigation = useCallback(() => {
     routeRequest.current++
@@ -412,20 +392,11 @@ export function DeliveryNavigationMap({ stop, autoStart, stopSignal, command, la
     const next = !headingUp; setHeadingUp(next); setFollow(true)
     map.current?.easeTo({ bearing: next ? smoothedHeading.current ?? 0 : 0, pitch: next ? 45 : 0, duration: 500 })
   }
-  const advanceDemoInstruction = () => {
-    const instructions = route.current?.instructions
-    if (!demoLocation || !instructions?.length) return
-    const nextIndex = Math.min(demoInstructionIndex + 1, instructions.length - 1)
-    setDemoInstructionIndex(nextIndex)
-    const next = localizeInstruction(instructions[nextIndex], language)
-    setInstruction(next)
-    guidanceRef.current(next)
-  }
   const durationText = durationRemaining === null ? '—' : `${Math.max(1, Math.round(durationRemaining / 60000))} min`
   const stateLabel = navigationState === 'active' ? 'ON ROUTE' : navigationState === 'paused' ? 'PAUSED' : navigationState === 'arrived' ? 'ARRIVED' : navigationState === 'locating' ? 'LOCATING' : navigationState === 'calculating' ? 'ROUTING' : navigationState === 'error' ? 'ERROR' : 'READY'
 
   return <section className="delivery-navigation" aria-label="In-app delivery navigation">
-    <div className="navigation-map-head"><div><p className="eyebrow">IN-APP NAVIGATION{demoLocation ? ' · DEMO GPS: SWARGATE, PUNE' : ''}</p><strong>{stop.customer_name} · Order #{stop.order_number}</strong><span>{stop.address}</span></div><button className="map-control" aria-label="Recenter on rider" onClick={recenter}><LocateFixed size={19} /></button></div>
+    <div className="navigation-map-head"><div><p className="eyebrow">IN-APP NAVIGATION</p><strong>{stop.customer_name} · Order #{stop.order_number}</strong><span>{stop.address}</span></div><button className="map-control" aria-label="Recenter on rider" onClick={recenter}><LocateFixed size={19} /></button></div>
     <div className="navigation-map-wrap">
       <div className="navigation-map-canvas" ref={container} role="application" aria-label="Interactive OpenStreetMap route map" />
       {route.current && <div className="navigation-turn-card"><Navigation size={20}/><div><small>NEXT TURN{distanceToTurn !== null ? ` · ${formatDistance(distanceToTurn)}` : ''}</small><strong>{instruction}</strong></div></div>}
@@ -442,8 +413,6 @@ export function DeliveryNavigationMap({ stop, autoStart, stopSignal, command, la
     {destinationError && <div className="navigation-retry-row"><button className="button button-light" onClick={() => setDestinationRetry(value => value + 1)}>Retry address lookup</button></div>}
     {!mapReady && message.includes('Map tiles could not load') && <div className="navigation-retry-row"><button className="button button-light" onClick={() => setMapRetry(value => value + 1)}>Retry map tiles</button></div>}
     <div className="navigation-controls">
-      {navigationState !== 'active' && navigationState !== 'paused' && <button className="button button-light" onClick={() => { endNavigation(); setDemoLocation(value => !value) }}>{demoLocation ? 'Use live GPS' : 'Use Pune demo start'}</button>}
-      {demoLocation && navigationState === 'active' && <button className="button button-light" onClick={advanceDemoInstruction}>Next demo direction</button>}
       {navigationState === 'active' ? <button className="button button-primary" onClick={() => setNavigationState('paused')}><Pause size={17}/> Pause</button> : navigationState === 'paused' ? <button className="button button-primary" onClick={() => setNavigationState('active')}><Play size={17}/> Resume</button> : <button className="button button-primary" onClick={startNavigation} disabled={!mapReady || !destinationReady || navigationState === 'locating' || navigationState === 'calculating'}><Navigation size={17}/>{navigationState === 'locating' ? 'Locating…' : navigationState === 'calculating' ? 'Calculating…' : navigationState === 'arrived' ? 'Start again' : !mapReady ? 'Loading map…' : !destinationReady ? 'Locating address…' : 'Start navigation'}</button>}
       <button className="button button-light" onClick={() => setMuted(value => !value)} disabled={navigationState !== 'active' && navigationState !== 'paused'} aria-label={muted ? 'Unmute voice guidance' : 'Mute voice guidance'}>{muted ? <VolumeX size={17}/> : <Volume2 size={17}/>} {muted ? 'Muted' : 'Voice on'}</button>
       <button className="button button-light" onClick={recenter}><RotateCcw size={17}/> Recenter</button>

@@ -206,7 +206,6 @@ button, input, a { -webkit-tap-highlight-color: transparent; }
 .brand-mark { width: 34px; height: 34px; border-radius: 12px; box-shadow: none; }
 .rider { font-size: 11px; }
 .avatar { width: 30px; height: 30px; }
-.demo-header-badge { display: none; }
 .welcome-row { align-items: center; padding: 17px 0 14px; }
 .welcome-row h1, .page-heading h1 { margin: 0 0 4px; color: var(--text); font-size: 23px; font-weight: 720; line-height: 1.2; }
 .welcome-row .muted { font-size: 12px; }
@@ -384,7 +383,6 @@ html, body { background: var(--canvas); }
 .parcel-detail-art { background: linear-gradient(135deg, #faf6ec, #f1e9fc); }
 .otp-detail-panel { border-color: #ecd8c9; background: linear-gradient(145deg, #fff8f0, #fffdf8 78%); }
 .otp-detail-form > input { background: #fffdf8; }
-.demo-call-screen { background: linear-gradient(160deg, #fffdf8 0%, #f4efff 100%); }
 .assistant-card { background: #f1eafb; }
 button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-visible {
   outline: 3px solid #8955e866;
@@ -405,3 +403,4 @@ button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-vis
   .app-shell { padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
   .delivery-detail-card .action-row { flex-wrap: wrap; }
 }
+

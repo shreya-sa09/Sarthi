@@ -65,16 +65,6 @@
 .navigation-controls .button{min-height:42px}
 .navigation-retry-row{display:flex;justify-content:flex-start;padding:0 15px 12px}
 .location-note{display:block;margin-top:8px;color:#b83a4b;font-size:12px;line-height:1.45}
-.demo-call-backdrop{position:fixed;z-index:60;inset:0;display:grid;place-items:center;padding:20px;background:#21193699;backdrop-filter:blur(6px)}
-.demo-call-screen{width:min(100%,360px);display:flex;flex-direction:column;align-items:center;border:1px solid #ffffffa8;border-radius:28px;padding:28px 22px 22px;background:linear-gradient(160deg,#fff 0%,#f4efff 100%);text-align:center;box-shadow:0 24px 70px #1a0f2a55}
-.demo-call-label{border:1px solid #e3d3ff;border-radius:999px;padding:7px 10px;background:#f0e9ff;color:#56309c;font-size:10px;font-weight:800;letter-spacing:.6px}
-.demo-call-avatar{width:74px;height:74px;display:grid;place-items:center;margin-top:22px;border:1px solid #e9def8;border-radius:50%;background:#fff;color:#6335c9;box-shadow:0 8px 20px #40207816}
-.demo-call-screen h2{margin:12px 0 2px;font-size:23px}
-.demo-call-screen>p{margin:4px 0;color:#777187;font-size:13px}
-.demo-call-screen .demo-call-status{margin-top:22px;color:#402078;font-size:14px}
-.demo-call-screen .demo-call-notice{max-width:260px;margin-top:9px;font-size:11px;line-height:1.5}
-.demo-call-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:24px}
-.demo-call-actions .button{min-height:46px}
 .wake-button{margin-top:20px}
 .speak-large{margin-top:15px}
 .conversation-list{display:flex;flex-direction:column;gap:8px;margin-top:18px}
@@ -223,7 +213,7 @@
 /* Shared warm-cream surfaces: keep outlines visible without harsh white panels. */
 .manual-actions button, .delivery-navigation, .map-control, .assistant-turn,
 .parcel-info-card, .delivery-filter-row button, .repeat-response,
-.voice-main-button:disabled, .otp-detail-form > input, .demo-call-avatar {
+.voice-main-button:disabled, .otp-detail-form > input {
   background-color: #fffdf8;
 }
 .delivery-navigation, .map-control, .assistant-turn, .parcel-info-card,
@@ -303,3 +293,4 @@
   .delivery-address svg, .delivery-parcel svg { width: 17px; height: 17px; }
   .delivery-open { font-size: 13px; }
 }
+

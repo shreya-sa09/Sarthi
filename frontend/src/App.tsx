@@ -14,7 +14,6 @@ import { ActivityPage } from './pages/ActivityPage'
 import { SarthiPage } from './pages/SarthiPage'
 import { AssistantShortcut } from './components/voice/AssistantShortcut'
 import { WelcomePage } from './pages/WelcomePage'
-import { DemoCallScreen } from './components/calling/DemoCallScreen'
 import type { NavigationSnapshot } from './components/map/DeliveryNavigationMap'
 
 type VoiceStatus = 'idle' | 'standby' | 'wake_detected' | 'listening' | 'processing' | 'understanding' | 'awaiting_confirmation' | 'speaking' | 'success' | 'error'
@@ -42,6 +41,10 @@ function isStopPhrase(text: string): boolean {
 function isStopNavigationPhrase(text: string): boolean {
   const normalized = text.toLowerCase().replace(/[.!?,]/g, ' ').replace(/\s+/g, ' ').trim()
   return /^(?:stop|cancel)(?: the)? navigation$|^(?:navigation|directions) (?:band|rok|roko|khatam|cancel)(?: karo)?$|^(?:नेविगेशन|दिशा)(?: बंद| रोक| रद्द)(?: करो| कीजिए)?$/.test(normalized)
+}
+
+function isCurrentDeliveryPhrase(text: string): boolean {
+  return /\b(?:current|this|present|right now)\s+(?:delivery|order|stop)\b|\b(?:is|iss)\s+(?:order|delivery|stop)\b|अभी\s+(?:जो\s+)?(?:ऑर्डर|order|डिलीवरी|delivery)\s+(?:है|चल\s+रहा\s+है)|इसी\s+(?:ऑर्डर|order|डिलीवरी|delivery)|यही\s+(?:ऑर्डर|order|डिलीवरी|delivery)/i.test(text)
 }
 
 function isAffirmative(text: string): boolean {
@@ -93,7 +96,6 @@ export default function App() {
   const [navigationCommand, setNavigationCommand] = useState<{ action: 'pause' | 'resume'; requestId: number } | null>(null)
   const [navigationSnapshot, setNavigationSnapshot] = useState<NavigationSnapshot>({ state: 'idle', instruction: '', metersRemaining: null })
   const [navigationCommandId, setNavigationCommandId] = useState(0)
-  const [demoCallStopId, setDemoCallStopId] = useState<number | null>(null)
   const [selectedStopId, setSelectedStopId] = useState<number | null>(null)
   const [otpEntry, setOtpEntry] = useState('')
   const [otpPending, setOtpPending] = useState(false)
@@ -141,7 +143,6 @@ export default function App() {
   const orderedStops = useMemo(() => [...stops].sort((left, right) => left.sequence - right.sequence || left.id - right.id), [stops])
   const activeStop = useMemo(() => orderedStops.find((stop) => stop.status === 'pending'), [orderedStops])
   const selectedStop = useMemo(() => stops.find((stop) => stop.id === selectedStopId) ?? null, [stops, selectedStopId])
-  const demoCallStop = useMemo(() => run?.is_demo ? stops.find((stop) => stop.id === demoCallStopId) ?? null : null, [run?.is_demo, stops, demoCallStopId])
   const otpStop = useMemo(() => stops.find((stop) => stop.id === otpStopId) ?? null, [stops, otpStopId])
   const current = useMemo(() => otpPending && otpStop ? otpStop : stops.find((stop) => stop.id === selectedStopId && stop.status !== 'delivered') ?? activeStop ?? null, [stops, selectedStopId, activeStop, otpPending, otpStop])
   const mapTarget = otpPending && otpStop ? otpStop : selectedStop ?? current
@@ -362,7 +363,7 @@ export default function App() {
           if (offeredStop) { await performNavigation(offeredStop, language, heard); return }
         }
       }
-      if (otpPending && proposal?.proposed_action === 'delivered' && otpStop) {
+      if (otpPending && otpStop) {
         if (!otpEntry && /^(yes|yeah|yep|sure|confirm|haan|हाँ|जी|ठीक है|haan ji)[.! ]*$/i.test(heard)) {
           const prompt = localizedReply(`Please tell me the delivery OTP for order ${otpStop.order_number}.`, `कृपया ऑर्डर ${otpStop.order_number} का डिलीवरी OTP बताइए।`, language, `Order ${otpStop.order_number} ka delivery OTP bataiye.`)
           setLastResponse(prompt); setVoiceStatus('speaking'); startInterruptRecognition()
@@ -424,6 +425,8 @@ export default function App() {
           setVoiceStatus('processing')
           let updated: Run
           try {
+            // Let React paint the recognized digits into the visible OTP field before auto-verifying.
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 250))
             updated = await applyAction(otpStop.id, 'delivered', digits, heard)
           } catch (cause) {
             actionInFlight.current = false
@@ -449,12 +452,11 @@ export default function App() {
           finally { if (isCurrent()) { clearRecognition(); if (conversationActive.current) void startCommandRecording() } }
           return
         }
-        if (!digits) {
-          setProposal(null); setOtpPending(false); setOtpStopId(null); setOtpEntry(''); setOtpConfirmed(false)
-          await interpretTranscript(heard, language)
-          return
-        }
-        const retryPrompt = localizedReply('I could not clearly hear the OTP. Please say the digits again.', 'मुझे OTP साफ़ सुनाई नहीं दिया। कृपया अंक फिर से बताइए।', language, 'OTP clear nahi suna. Please digits ek baar phir boliye.')
+        setOtpEntry(digits.slice(0, otpStop.otp_length))
+        setOtpConfirmed(false)
+        const retryPrompt = digits
+          ? localizedReply(`I heard ${digits.length} digits. The OTP box is still open; please say all ${otpStop.otp_length} digits again or correct them there.`, `मुझे ${digits.length} अंक सुनाई दिए। OTP बॉक्स खुला है; कृपया सभी ${otpStop.otp_length} अंक फिर से बोलें या वहीं सुधारें।`, language, `${digits.length} digits sune. OTP box khula hai; saare ${otpStop.otp_length} digits phir se boliye ya box mein correct karein.`)
+          : localizedReply(`I could not hear the OTP clearly. The OTP box is still open; say all ${otpStop.otp_length} digits again or enter them there.`, `OTP साफ़ सुनाई नहीं दिया। OTP बॉक्स खुला है; सभी ${otpStop.otp_length} अंक फिर से बोलें या वहीं भरें।`, language, `OTP clear nahi suna. OTP box khula hai; saare ${otpStop.otp_length} digits phir se boliye ya box mein daaliye.`)
         setLastResponse(retryPrompt); setError(''); setVoiceStatus('speaking'); startInterruptRecognition()
         try { await speak(retryPrompt, language) } catch (cause) { if (!isCurrent()) return; setError(speechPlaybackError(cause)); setVoiceStatus('error') }
         if (!isCurrent()) return
@@ -590,6 +592,16 @@ export default function App() {
           return
         }
       }
+      const navigationRequest = /\b(?:navigate|directions|route)\b|नेविगेट|रास्ता|दिशा/i.test(heard)
+      if (navigationRequest && isCurrentDeliveryPhrase(heard)) {
+        if (!current) {
+          const message = localizedReply('There is no current delivery to navigate to.', 'अभी नेविगेट करने के लिए कोई मौजूदा डिलीवरी नहीं है।', language)
+          setLastResponse(message); setVoiceStatus('error'); void speak(message, language).catch(() => undefined)
+        } else {
+          await performNavigation(current, language, heard)
+        }
+        return
+      }
       const result = await understand(heard, language, selectedStopId, history)
       if (!isCurrent()) return
       const navigationIsActive = navigationSnapshot.state === 'active' || navigationSnapshot.state === 'paused'
@@ -622,19 +634,26 @@ export default function App() {
         return
       }
       const targetText = `${Object.values(result.extracted_details).join(' ')} ${heard}`.toLowerCase()
+      // Generic references such as “the current order” should resolve to the
+      // rider's selected/active stop. Do not let model-generated entity guesses
+      // turn that request into a false multi-customer match.
+      const asksForCurrent = isCurrentDeliveryPhrase(heard)
       const orderHint = Object.entries(result.extracted_details).find(([key]) => /order(_number|_id)?/i.test(key))?.[1]
       const nameHint = Object.entries(result.extracted_details).find(([key]) => /customer|recipient|person/i.test(key))?.[1]
-      const requestedOrder = orderHint ?? targetText.match(/\b\d{4,}\b/)?.[0]
+      const spokenOrder = heard.match(/\b\d{4,}\b/)?.[0]
+      const requestedOrder = spokenOrder ?? (asksForCurrent ? undefined : orderHint ?? targetText.match(/\b\d{4,}\b/)?.[0])
       const orderMatch = requestedOrder ? orderedStops.find((stop) => stop.order_number.toLowerCase() === requestedOrder.toLowerCase().replace(/^#/, '')) : undefined
-      const nameMatch = orderedStops.find((stop) => stop.customer_name.toLowerCase().split(/\s+/).some((part) => part.length > 2 && targetText.includes(part)))
+      const spokenText = heard.toLowerCase()
+      const spokenTokens = new Set(spokenText.match(/[\p{L}]+/gu) ?? [])
+      const nameMatches = orderedStops.filter((stop) => stop.customer_name.toLowerCase().split(/\s+/).some((part) => part.length > 3 && spokenTokens.has(part)))
+      const nameMatch = nameMatches.length === 1 ? nameMatches[0] : undefined
       const asksForNext = result.intent === 'NEXT_STOP_QUERY' || (result.intent === 'NAVIGATE_TO_STOP' && /\b(next|upcoming|agla|agli)\b/i.test(heard))
       const unresolvedOrder = Boolean(requestedOrder && !orderMatch)
-      const genericName = !nameHint || /^(customer|next customer|current customer|the customer)$/i.test(nameHint.trim())
-      const unresolvedName = Boolean(nameHint && !genericName && !nameMatch)
+      const genericName = !nameHint || /^(customer|next customer|current customer|the customer|current order|current delivery|this order|this delivery)$/i.test(nameHint.trim())
+      const unresolvedName = Boolean(!asksForCurrent && nameHint && !genericName && !nameMatch)
       const missingExplicitTarget = unresolvedOrder || unresolvedName
       const matchedStop = asksForNext ? activeStop : orderMatch ?? nameMatch ?? (missingExplicitTarget ? null : current)
-      const nameMatches = stops.filter((stop) => stop.customer_name.toLowerCase().split(/\s+/).some((part) => part.length > 2 && targetText.includes(part)))
-      const ambiguousTarget = nameMatches.length > 1 && ['call_customer', 'directions', 'delivered', 'contact_attempt', 'wrong_address', 'reschedule'].includes(result.proposed_action ?? '')
+      const ambiguousTarget = !asksForCurrent && nameMatches.length > 1 && ['call_customer', 'directions', 'delivered', 'contact_attempt', 'wrong_address', 'reschedule'].includes(result.proposed_action ?? '')
       if (ambiguousTarget) {
         result.intent = 'UNCLEAR'; result.proposed_action = null; result.requires_confirmation = false
         result.response_text = localizedReply('I found more than one matching delivery. Please say the customer’s full name or order number.', 'एक से अधिक डिलीवरी मिलीं। कृपया ग्राहक का पूरा नाम या ऑर्डर नंबर बताइए।', language)
@@ -819,16 +838,6 @@ export default function App() {
     setError('')
     setActionFailed(false)
     if (proposal.proposed_action === 'call_customer') {
-      if (run?.is_demo) {
-        clearRecognition()
-        conversationActive.current = false
-        stopSpeaking()
-        setProposal(null)
-        setDemoCallStopId(targetStop.id)
-        setLastResponse(localizedReply(`Opening a simulated call with ${targetStop.customer_name}. No phone call is placed.`, `${targetStop.customer_name} के साथ एक नकली कॉल शुरू हो रही है। कोई फ़ोन कॉल नहीं की जाएगी।`, responseLanguage))
-        setVoiceStatus('success')
-        return
-      }
       if (!targetStop.customer_phone) {
         setSelectedStopId(targetStop.id); setPage('deliveries'); setPhoneEditorOpen(true)
         const message = localizedReply(`No customer number is saved for ${targetStop.customer_name}. Add it in delivery details, then use Call customer.`, `${targetStop.customer_name} का फ़ोन नंबर सेव नहीं है। डिलीवरी विवरण में नंबर जोड़ें, फिर ग्राहक को कॉल करें।`, responseLanguage)
@@ -971,16 +980,16 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <AppHeader riderName={run?.rider_name ?? 'Rider'} demo={run?.is_demo ?? false} online={run?.status === 'active'} onHome={() => { navigationOfferStopId.current = null; setPage('home'); setSelectedStopId(null) }} />
+      <AppHeader riderName={run?.rider_name ?? 'Rider'} online={run?.status === 'active'} onHome={() => { navigationOfferStopId.current = null; setPage('home'); setSelectedStopId(null) }} />
       {page === 'home' ? <section className="welcome-row">
-        <div><p className="eyebrow">{run?.is_demo ? 'DEMO RUN · FICTIONAL ORDERS' : 'TODAY’S RUN'}</p><h1>Hello, {run?.rider_name ?? 'Rider'}</h1><p className="muted">Your deliveries and rider assistance for this run.</p></div>
+        <div><p className="eyebrow">TODAY’S RUN</p><h1>Hello, {run?.rider_name ?? 'Rider'}</h1><p className="muted">Your deliveries and rider assistance for this run.</p></div>
         <div className="run-pill"><span className={`online-dot ${run?.status === 'active' ? '' : 'offline'}`} /> {run?.status === 'active' ? 'Active run' : loading ? 'Loading…' : 'Run unavailable'}</div>
       </section> : <section className="page-heading"><div><p className="eyebrow">SARTHI · DELIVERY CO-PILOT</p><h1>{page === 'deliveries' ? 'Your deliveries' : page === 'map' ? 'Navigation' : page === 'sarthi' ? 'Voice assistant' : 'Activity'}</h1></div>{page === 'deliveries' && <span>{stops.length} orders</span>}</section>}
       {error && <div className="error-banner" role="alert"><span>{error}</span>{audioNeedsUnlock && <button className="button button-primary" onClick={() => void enableSpeechOutput()}>{audioReady ? 'Retry audio' : 'Enable audio'}</button>}{/microphone permission|hands-free wake listening could not start/i.test(error) && <button className="button button-primary" onClick={startStandbyRecognition}>Enable hands-free</button>}</div>}
       {page === 'home' && <DeliveryProgress completed={completed} remaining={remaining} total={stops.length} />}
       <section className="content-grid">
         <div className="main-column">
-          {(page === 'home' || (page === 'deliveries' && selectedStopId !== null && selectedStop?.status !== 'delivered')) && <ActiveDeliveryCard stop={current} isHome={page === 'home'} isActive={current?.id === activeStop?.id} isDemo={Boolean(run?.is_demo)} phoneEntry={phoneEntry} phoneEditorOpen={phoneEditorOpen} voiceLabel={micButtonLabel} voiceDisabled={!canStartVoice && voiceStatus !== 'listening'} showOtpSection={page === 'deliveries'} showOtpForm={page === 'deliveries' && otpPending} otpEntry={otpEntry} otpConfirmed={otpConfirmed} otpBusy={voiceBusy} onOtpEntry={(value) => { setOtpEntry(value); setOtpConfirmed(false) }} onOtpConfirm={setOtpConfirmed} onCancelOtp={() => { navigationOfferStopId.current = null; setOtpPending(false); setOtpStopId(null); setOtpEntry(''); setOtpConfirmed(false) }} onBack={() => { navigationOfferStopId.current = null; setSelectedStopId(null) }} onNavigate={() => { navigationOfferStopId.current = null; if (current) { setSelectedStopId(current.id); setNavigationStartStopId(current.id); setPage('map') } }} onDetails={() => { if (current) { navigationOfferStopId.current = null; setSelectedStopId(current.id); setPage('deliveries') } }} onVoice={() => { setPage('sarthi'); void handleVoice() }} onAction={(action) => void recordManualAction(action)} onPhoneEntry={setPhoneEntry} onPhoneSave={(event) => void submitCustomerPhone(event)} onPhoneEditor={() => setPhoneEditorOpen((open) => !open)} onDemoCall={() => { if (current && run?.is_demo) setDemoCallStopId(current.id) }} />}
+          {(page === 'home' || (page === 'deliveries' && selectedStopId !== null && selectedStop?.status !== 'delivered')) && <ActiveDeliveryCard stop={current} isHome={page === 'home'} isActive={current?.id === activeStop?.id} phoneEntry={phoneEntry} phoneEditorOpen={phoneEditorOpen} voiceLabel={micButtonLabel} voiceDisabled={!canStartVoice && voiceStatus !== 'listening'} showOtpSection={page === 'deliveries'} showOtpForm={page === 'deliveries' && otpPending} otpEntry={otpEntry} otpConfirmed={otpConfirmed} otpBusy={voiceBusy} onOtpEntry={(value) => { setOtpEntry(value); setOtpConfirmed(false) }} onOtpConfirm={setOtpConfirmed} onCancelOtp={() => { navigationOfferStopId.current = null; setOtpPending(false); setOtpStopId(null); setOtpEntry(''); setOtpConfirmed(false) }} onBack={() => { navigationOfferStopId.current = null; setSelectedStopId(null) }} onNavigate={() => { navigationOfferStopId.current = null; if (current) { setSelectedStopId(current.id); setNavigationStartStopId(current.id); setPage('map') } }} onDetails={() => { if (current) { navigationOfferStopId.current = null; setSelectedStopId(current.id); setPage('deliveries') } }} onVoice={() => { setPage('sarthi'); void handleVoice() }} onAction={(action) => void recordManualAction(action)} onPhoneEntry={setPhoneEntry} onPhoneSave={(event) => void submitCustomerPhone(event)} onPhoneEditor={() => setPhoneEditorOpen((open) => !open)} />}
           {page === 'home' && nextStop && <NextDeliveryCard stop={nextStop} onDetails={() => { navigationOfferStopId.current = null; setSelectedStopId(nextStop.id); setPage('deliveries') }} onNavigate={() => { navigationOfferStopId.current = null; setSelectedStopId(nextStop.id); setNavigationStartStopId(nextStop.id); setPage('map') }} />}
           {(transcript || proposal) && <article className="list-card voice-result-card">
             <div className="voice-result-heading"><p className="eyebrow">VOICE UPDATE</p><span className={`voice-status status-${voiceStatus}`} role="status" aria-live="polite">{voiceStatusLabel[voiceStatus]}</span></div>
@@ -1008,7 +1017,6 @@ export default function App() {
         </aside>
       </section>
       <BottomNavigation page={page} onNavigate={setPage} />
-      {demoCallStop && <DemoCallScreen stop={demoCallStop} onClose={() => setDemoCallStopId(null)} />}
       <footer>Voice-first delivery support · Use voice controls only when it is safe</footer>
     </main>
   )

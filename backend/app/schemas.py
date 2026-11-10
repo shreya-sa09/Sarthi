@@ -38,7 +38,6 @@ class RunView(BaseModel):
     id: int
     rider_name: str
     status: str
-    is_demo: bool
     started_at: datetime
     stops: list[StopView]
     activities: list[ActivityView]
