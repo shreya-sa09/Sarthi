@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Literal
+from typing import Literal, get_args
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -163,8 +163,36 @@ async def interpret_with_model(body: UnderstandRequest, current_stop: str, run_c
         headers = {"Authorization": f"Bearer {settings.groq_api_key}"}
         payload = {
             "model": settings.groq_model, "messages": history,
-            "temperature": 0.2, "max_tokens": 350,
-            "response_format": {"type": "json_object"},
+            "temperature": 0.2, "max_tokens": 1200, "reasoning_effort": "low",
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "sarthi_decision",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "intent": {"type": "string", "enum": list(get_args(Intent))},
+                            "confidence": {"type": "number"},
+                            "extracted_details": {
+                                "type": "object",
+                                "properties": {
+                                    "customer_name": {"type": "string"},
+                                    "order_number": {"type": "string"},
+                                    "address": {"type": "string"},
+                                    "requested_time": {"type": "string"},
+                                    "otp": {"type": "string"},
+                                },
+                                "required": ["customer_name", "order_number", "address", "requested_time", "otp"],
+                                "additionalProperties": False,
+                            },
+                            "response_text": {"type": "string"},
+                        },
+                        "required": ["intent", "confidence", "extracted_details", "response_text"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
         }
     elif provider == "gemini":
         if not settings.gemini_api_key:
@@ -188,7 +216,21 @@ async def interpret_with_model(body: UnderstandRequest, current_stop: str, run_c
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"Could not reach {provider.title()} decision model") from exc
     if response.is_error:
-        raise HTTPException(status_code=502, detail=f"{provider.title()} decision request failed ({response.status_code}); check provider key, quota, and model")
+        provider_message = ""
+        try:
+            error_payload = response.json()
+            error_object = error_payload.get("error", {}) if isinstance(error_payload, dict) else {}
+            provider_message = str(error_object.get("message", "")) if isinstance(error_object, dict) else str(error_object)
+        except (ValueError, TypeError):
+            provider_message = response.text[:240]
+        provider_message = " ".join(provider_message.split())[:300]
+        retry_after = response.headers.get("retry-after")
+        if response.status_code == 429:
+            wait_hint = f" Retry after {retry_after} seconds." if retry_after and retry_after.isdigit() else " Check Groq Console for the limit reset time."
+            detail = f"Groq rate limit reached.{wait_hint} {provider_message}".strip()
+            raise HTTPException(status_code=429, detail=detail)
+        detail = f"{provider.title()} rejected the decision request ({response.status_code}). {provider_message or 'Check the provider request and model settings.'}".strip()
+        raise HTTPException(status_code=502, detail=detail)
     try:
         response_json = response.json()
         if provider == "groq":

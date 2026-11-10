@@ -13,7 +13,7 @@ from app.voice import router as voice_router
 app = FastAPI(title="Sarthi API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=list({settings.frontend_origin, "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://localhost:5173", "http://localhost:5174"}),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
@@ -24,7 +24,7 @@ app.include_router(evon_router)
 app.include_router(navigation_router)
 
 
-DEMO_OTP = "4821"
+DEMO_OTP = "48291"
 DEMO_STOPS = [
     {"sequence": 1, "order_number": "1042", "customer_name": "Rahul Sharma", "customer_phone": "+1 202-555-0142", "address": "Shree Residency, Baner Road, Baner, Pune 411045", "access_note": "Gate 2 · Tower B · Ring bell twice", "parcel_description": "Wireless earbuds", "package_category": "Electronics accessory", "weight_kg": 0.35, "payment_type": "prepaid", "cod_amount": None, "delivery_window": "10:00 AM–12:00 PM", "status": "pending", "exception_reason": None, "otp_code": DEMO_OTP},
     {"sequence": 2, "order_number": "1043", "customer_name": "Ananya Patil", "customer_phone": "+1 202-555-0143", "address": "Maple Heights, Aundh Road, Aundh, Pune 411007", "access_note": "Use C Wing entrance · Call on arrival", "parcel_description": "Cotton kurta set", "package_category": "Clothing", "weight_kg": 0.8, "payment_type": "cod", "cod_amount": 1299, "delivery_window": "12:00 PM–2:00 PM", "status": "pending", "exception_reason": None, "otp_code": DEMO_OTP},

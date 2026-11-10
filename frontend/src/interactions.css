@@ -250,3 +250,56 @@
   }
   .app-shell { padding-bottom: calc(112px + env(safe-area-inset-bottom)); }
 }
+
+/* Mobile readability pass: enlarge key rider information and controls on phones. */
+@media (max-width: 600px) {
+  .app-shell { padding-right: 18px; padding-left: 18px; }
+  .welcome-row { padding-top: 28px; padding-bottom: 18px; }
+  .welcome-row h1 { font-size: 27px; }
+  .welcome-row .muted { font-size: 15px; }
+  .eyebrow { font-size: 11px; letter-spacing: 1px; }
+  .run-pill { font-size: 12px; }
+  .progress-card-heading strong { font-size: 15px; }
+  .progress-fraction { font-size: 13px; }
+  .progress-metrics strong { font-size: 21px; }
+  .progress-metrics span { font-size: 11px; }
+  .current-card, .list-card, .timeline-card { padding: 17px; }
+  .section-heading h2 { font-size: 23px; }
+  .status-tag, .count-label { font-size: 12px; }
+  .customer-info strong { font-size: 15px; }
+  .customer-info span, .address-box span { font-size: 13px; }
+  .address-box strong { font-size: 14px; }
+  .parcel-info-copy span { font-size: 10px; }
+  .parcel-info-copy strong { font-size: 14px; white-space: normal; line-height: 1.3; }
+  .parcel-info-copy small { font-size: 12px; }
+  .payment-pill { font-size: 10px; }
+  .delivery-meta-grid span { font-size: 11px; }
+  .delivery-meta-grid strong { font-size: 12px; white-space: normal; line-height: 1.35; }
+  .button { min-height: 46px; font-size: 13px; }
+  .assistant-card > p, .proposal-text { font-size: 14px; }
+  .voice-button span { font-size: 13px; }
+  .assistant-card > small { font-size: 11px; }
+  .stop-copy strong { font-size: 14px; }
+  .stop-copy strong span, .stop-copy p { font-size: 12px; }
+  .stop-copy small, .timeline-item p { font-size: 11px; }
+  .timeline-item strong { font-size: 13px; }
+  .app-nav { min-height: 76px; }
+  .app-nav button { min-width: 56px; min-height: 58px; gap: 4px; padding: 7px 6px; font-size: 11px; }
+  .app-nav button svg { width: 20px; height: 20px; }
+}
+
+/* Delivery queue phone typography: keep every label comfortably readable. */
+@media (max-width: 600px) {
+  .delivery-queue .eyebrow { font-size: 12px; letter-spacing: .9px; }
+  .delivery-queue .section-heading h2 { font-size: 25px; }
+  .delivery-queue .count-label { font-size: 13px; padding: 8px 10px; }
+  .delivery-filter-row { gap: 8px; }
+  .delivery-filter-row button { min-height: 44px; padding: 0 13px; font-size: 13px; }
+  .delivery-card { gap: 11px; padding: 15px; }
+  .order-number { font-size: 13px; }
+  .delivery-status, .payment-badge { font-size: 12px; }
+  .delivery-customer { font-size: 16px; }
+  .delivery-address, .delivery-parcel { font-size: 13px; line-height: 1.5; }
+  .delivery-address svg, .delivery-parcel svg { width: 17px; height: 17px; }
+  .delivery-open { font-size: 13px; }
+}

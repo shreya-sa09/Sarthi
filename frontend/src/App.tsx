@@ -417,14 +417,36 @@ export default function App() {
         const digits = normalizeOtpSpeech(heard)
         if (digits.length === otpStop.otp_length) {
           setOtpEntry(digits); setOtpConfirmed(false)
-          const message = localizedReply(`I heard OTP ${digits} for order ${otpStop.order_number}, ${otpStop.customer_name}. Is that correct? Say yes to submit it, or no to repeat it.`, `ऑर्डर ${otpStop.order_number}, ${otpStop.customer_name} के लिए OTP ${digits} सुनाई दिया। क्या यह सही है? जमा करने के लिए हाँ कहें, या दोबारा बताने के लिए नहीं कहें।`, language, `Order ${otpStop.order_number} ke liye maine OTP ${digits} suna hai. Kya ye correct hai? Submit karne ke liye haan, ya repeat karne ke liye nahi boliye.`)
-          setLastResponse(message); setVoiceStatus('speaking')
-          startInterruptRecognition()
-          try { await speak(message, language); if (!isCurrent()) return; setVoiceStatus('awaiting_confirmation') }
-          catch (cause) { if (!isCurrent()) return; setError(speechPlaybackError(cause)); setVoiceStatus('error') }
+          setError('')
+          setLastResponse(localizedReply(`Checking the OTP for order ${otpStop.order_number}…`, `ऑर्डर ${otpStop.order_number} का OTP जाँच रहे हैं…`, language, `Order ${otpStop.order_number} ka OTP check kar rahe hain.`))
+          if (actionInFlight.current) return
+          actionInFlight.current = true
+          setVoiceStatus('processing')
+          let updated: Run
+          try {
+            updated = await applyAction(otpStop.id, 'delivered', digits, heard)
+          } catch (cause) {
+            actionInFlight.current = false
+            if (!isCurrent()) return
+            const detail = cause instanceof Error ? cause.message : localizedReply('OTP verification failed. Please check the digits and try again.', 'OTP सत्यापन नहीं हो सका। अंक जाँचकर फिर कोशिश करें।', language)
+            const recovery = localizedReply(`That OTP was not accepted: ${detail}. The heard digits remain in the box; correct them or speak the OTP again.`, `यह OTP स्वीकार नहीं हुआ: ${detail}। सुने गए अंक बॉक्स में हैं; उन्हें सुधारें या OTP फिर से बोलें।`, language, `OTP accept nahi hua: ${detail}. Sune gaye digits box mein hain; unhe correct karein ya OTP phir se boliye.`)
+            setError(recovery); setLastResponse(recovery); setOtpEntry(digits); setOtpConfirmed(false); setVoiceStatus('error')
+            try { await speak(recovery, language) } catch { if (!isCurrent()) return }
+            if (conversationActive.current) void startCommandRecording(true)
+            return
+          }
+          actionInFlight.current = false
+          setRun(updated); setProposal(null); setOtpPending(false); setOtpStopId(null); setOtpEntry(''); setOtpConfirmed(false)
+          const nextEligible = [...updated.stops].filter((stop) => stop.status === 'pending').sort((left, right) => left.sequence - right.sequence || left.id - right.id)[0]
+          setSelectedStopId(nextEligible?.id ?? null)
           if (!isCurrent()) return
-          clearRecognition()
-          if (conversationActive.current) void startCommandRecording(true)
+          navigationOfferStopId.current = nextEligible?.id ?? null
+          const nextMessage = nextEligible ? localizedReply(` Your next delivery is order ${nextEligible.order_number} for ${nextEligible.customer_name}. Would you like directions?`, `अगली डिलीवरी ऑर्डर ${nextEligible.order_number}, ${nextEligible.customer_name} की है। क्या आप दिशाएँ खोलना चाहेंगे?`, language, `Aapki next delivery order ${nextEligible.order_number}, ${nextEligible.customer_name} ki hai. Kya main directions dikhaun?`) : ''
+          const message = localizedReply(`OTP verified. Order ${otpStop.order_number} for ${otpStop.customer_name} is complete.${nextMessage}`, `OTP सत्यापित हो गया। ऑर्डर ${otpStop.order_number}, ${otpStop.customer_name} की डिलीवरी पूरी हो गई है।${nextMessage}`, language, `OTP verify ho gaya. Order ${otpStop.order_number} for ${otpStop.customer_name} complete ho gaya.${nextMessage}`)
+          setLastResponse(message); setVoiceStatus('speaking'); startInterruptRecognition()
+          try { await speak(message, language); if (!isCurrent()) return; setVoiceStatus('success') }
+          catch (cause) { if (cause instanceof Error && cause.name === 'AbortError') return; setError(`Delivery was completed, but ${speechPlaybackError(cause).toLowerCase()}`); setVoiceStatus('error') }
+          finally { if (isCurrent()) { clearRecognition(); if (conversationActive.current) void startCommandRecording() } }
           return
         }
         if (!digits) {
@@ -524,6 +546,50 @@ export default function App() {
     setVoiceStatus('understanding')
     setActionFailed(false)
     try {
+      // Keep delivery verification available even when the hosted decision model is rate-limited.
+      const isDeliveryCompletion = /\b(?:delivered|delivery(?:\s+is)?\s+(?:done|complete(?:d)?)|deliver(?:y)?\s+kar\s+(?:diya|di)|deliver(?:y)?\s+ho\s+gaya)\b|डिलीवर\s+कर\s+दिया|डिलीवरी\s+पूरी|पहुँचा\s+दिया|पहुंचा\s+दिया/i.test(heard)
+      if (isDeliveryCompletion) {
+        const spokenOrder = heard.match(/\b10\d{2}\b/)?.[0]
+        const orderStop = spokenOrder ? orderedStops.find((stop) => stop.order_number === spokenOrder && stop.status !== 'delivered') : undefined
+        const namedStop = orderedStops.find((stop) => stop.status !== 'delivered' && stop.customer_name.split(/\s+/).some((part) => part.length > 2 && heard.toLowerCase().includes(part.toLowerCase())))
+        const target = orderStop ?? namedStop ?? current
+        if (target && target.status !== 'delivered') {
+          const hasOtpMarker = /\b(?:otp|code|pin)\b|ओटीपी|कोड/i.test(heard)
+          const digits = hasOtpMarker ? normalizeOtpSpeech(heard) : ''
+          setSelectedStopId(target.id)
+          setPage('deliveries')
+          setOtpStopId(target.id)
+          setOtpPending(true)
+          setOtpEntry(digits)
+          setOtpConfirmed(false)
+          const prompt = localizedReply(`Please tell me the ${target.otp_length}-digit delivery OTP for order ${target.order_number}.`, `कृपया ऑर्डर ${target.order_number} का ${target.otp_length} अंकों का OTP बताइए।`, language, `Order ${target.order_number} ka ${target.otp_length}-digit delivery OTP bataiye.`)
+          setProposal({ intent: 'DELIVERY_COMPLETED', confidence: 1, extracted_details: { otp: digits }, response_text: prompt, proposed_action: 'delivered', requires_confirmation: false, understanding_engine: 'local OTP verification' })
+          if (hasOtpMarker && digits.length === target.otp_length) {
+            setVoiceStatus('processing')
+            try {
+              const updated = await applyAction(target.id, 'delivered', digits, heard)
+              if (!isCurrent()) return
+              setRun(updated); setOtpPending(false); setOtpStopId(null); setOtpEntry(''); setOtpConfirmed(false); setProposal(null)
+              const confirmation = localizedReply(`OTP verified. Order ${target.order_number} for ${target.customer_name} is complete.`, `OTP सत्यापित हो गया। ऑर्डर ${target.order_number}, ${target.customer_name} की डिलीवरी पूरी हो गई है।`, language, `OTP verify ho gaya. Order ${target.order_number} for ${target.customer_name} complete ho gaya.`)
+              setLastResponse(confirmation); setVoiceStatus('success')
+              try { await speak(confirmation, language) } catch { /* Keep the verified delivery state if speech playback fails. */ }
+            } catch (cause) {
+              if (!isCurrent()) return
+              const detail = cause instanceof Error ? cause.message : 'The code did not match.'
+              const recovery = localizedReply(`That code was not accepted (${detail}). The delivery is still pending; correct the digits in the OTP box or say them again.`, `यह कोड स्वीकार नहीं हुआ (${detail})। डिलीवरी अभी पूरी नहीं हुई है; OTP बॉक्स में अंक सुधारें या फिर से बोलें।`, language, `Code accept nahi hua (${detail}). Delivery pending hai; OTP box mein digits correct karein ya phir se boliye.`)
+              setError(recovery); setLastResponse(recovery); setVoiceStatus('error')
+              try { await speak(recovery, language) } catch { /* Keep the correction instructions visible if TTS is unavailable. */ }
+              if (conversationActive.current) void startCommandRecording(true)
+            }
+          } else {
+            const message = hasOtpMarker ? localizedReply(`I heard a code, but it must contain ${target.otp_length} digits. Check the OTP box and correct it.`, `कोड सुना, लेकिन इसमें ${target.otp_length} अंक होने चाहिए। OTP बॉक्स में जाँचकर सुधारें।`, language, `Code suna, lekin ${target.otp_length} digits hone chahiye. OTP box mein check karke correct karein.`) : prompt
+            setLastResponse(message); setVoiceStatus('speaking')
+            try { await speak(message, language); if (isCurrent()) setVoiceStatus('awaiting_confirmation') } catch { if (isCurrent()) setVoiceStatus('awaiting_confirmation') }
+            if (conversationActive.current) void startCommandRecording(true)
+          }
+          return
+        }
+      }
       const result = await understand(heard, language, selectedStopId, history)
       if (!isCurrent()) return
       const navigationIsActive = navigationSnapshot.state === 'active' || navigationSnapshot.state === 'paused'
@@ -753,6 +819,16 @@ export default function App() {
     setError('')
     setActionFailed(false)
     if (proposal.proposed_action === 'call_customer') {
+      if (run?.is_demo) {
+        clearRecognition()
+        conversationActive.current = false
+        stopSpeaking()
+        setProposal(null)
+        setDemoCallStopId(targetStop.id)
+        setLastResponse(localizedReply(`Opening a simulated call with ${targetStop.customer_name}. No phone call is placed.`, `${targetStop.customer_name} के साथ एक नकली कॉल शुरू हो रही है। कोई फ़ोन कॉल नहीं की जाएगी।`, responseLanguage))
+        setVoiceStatus('success')
+        return
+      }
       if (!targetStop.customer_phone) {
         setSelectedStopId(targetStop.id); setPage('deliveries'); setPhoneEditorOpen(true)
         const message = localizedReply(`No customer number is saved for ${targetStop.customer_name}. Add it in delivery details, then use Call customer.`, `${targetStop.customer_name} का फ़ोन नंबर सेव नहीं है। डिलीवरी विवरण में नंबर जोड़ें, फिर ग्राहक को कॉल करें।`, responseLanguage)

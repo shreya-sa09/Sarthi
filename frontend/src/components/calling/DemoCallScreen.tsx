@@ -9,7 +9,7 @@ export function DemoCallScreen({ stop, onClose }: { stop: Stop; onClose: () => v
       <span className="demo-call-label">DEMO CALL · SIMULATED</span>
       <span className="demo-call-avatar"><UserRound size={30} /></span>
       <h2 id="demo-call-title">{stop.customer_name}</h2>
-      <p>{stop.customer_phone || 'No customer number is saved'}</p>
+      <p>{stop.customer_phone ? 'Customer number saved' : 'No customer number is saved'}</p>
       <strong className="demo-call-status">{connected ? 'Simulated call connected' : 'Simulated incoming call'}</strong>
       <p className="demo-call-notice">This is a UI demonstration only. No telephone call is placed.</p>
       <div className="demo-call-actions">

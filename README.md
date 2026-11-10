@@ -26,7 +26,7 @@ npm install
 npm run dev
 ```
 
-The backend seeds a sample rider run in local SQLite on first launch. The OTPs in that local seed are test values, not production credentials. Set `GNANI_API_KEY` in `backend/.env`; never put it in frontend variables or commit it. The local `.env` is ignored by Git. To use Supabase Postgres, set `DATABASE_URL` to its connection string; plain `postgresql://` URLs are adapted to the installed psycopg driver.
+The backend seeds a sample rider run in local SQLite on first launch. For the local demo, use OTP 48291 for seeded deliveries; it is a test value, not a production credential. Set `GNANI_API_KEY` in `backend/.env`; never put it in frontend variables or commit it. The local `.env` is ignored by Git. To use Supabase Postgres, set `DATABASE_URL` to its connection string; plain `postgresql://` URLs are adapted to the installed psycopg driver.
 
 Sarthi's decision model is a hosted LLM, with Groq selected by default. Add `GROQ_API_KEY` to `backend/.env`; you can switch to Gemini by setting `DECISION_PROVIDER=gemini` and adding `GEMINI_API_KEY`. If the selected key is missing or its provider is unavailable, Sarthi reports the problem instead of silently using rule-based replies. Keep all provider keys in the backend environment only.
 

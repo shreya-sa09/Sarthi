@@ -71,7 +71,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const getActiveRun = () => request<Run>('/api/run/active')
 
-export const geocodeDeliveryAddress = (address: string) => request<GeoPoint & { label: string }>(`/api/navigation/geocode?q=${encodeURIComponent(address)}`)
+export const geocodeDeliveryAddress = (address: string) => request<GeoPoint & { label: string; approximate?: boolean }>(`/api/navigation/geocode?q=${encodeURIComponent(address)}`)
 
 export const getNavigationRoute = (origin: GeoPoint, destination: GeoPoint, language = 'en') => request<NavigationRoute>('/api/navigation/route', {
   method: 'POST', headers: { 'Content-Type': 'application/json' },
