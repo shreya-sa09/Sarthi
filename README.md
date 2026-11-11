@@ -251,7 +251,7 @@ The following mobile UI captures show the welcome screen, run overview, delivery
 | ![Sarthi delivery queue with fictional sample data](docs/screenshots/deliveries.png) | ![Sarthi map and navigation screen](docs/screenshots/navigation.png) |
 | Activity Timeline | Sarthi Voice |
 | --- | --- |
-| ![Sarthi activity timeline using sample data](docs/screenshots/activity.png) | ![Sarthi voice screen](<img width="738" height="1600" alt="voice" src="https://github.com/user-attachments/assets/9ee05478-cab3-4b06-b781-6529f53bc27b" /> ) |
+| ![Sarthi activity timeline using sample data](docs/screenshots/activity.png) | ![Sarthi voice screen] |
 
 
 
