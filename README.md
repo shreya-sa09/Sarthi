@@ -249,9 +249,9 @@ The following mobile UI captures show the welcome screen, run overview, delivery
 | Delivery queue | Route navigation |
 | --- | --- |
 | ![Sarthi delivery queue with fictional sample data](docs/screenshots/deliveries.png) | ![Sarthi map and navigation screen](docs/screenshots/navigation.png) |
-| Activity Timeline | Sarthi Voice |
-| --- | --- |
-| ![Sarthi activity timeline using sample data](docs/screenshots/activity.png) | ![Sarthi voice screen] |
+| Activity Timeline | 
+| --- | 
+| ![Sarthi activity timeline using sample data](docs/screenshots/activity.png) |
 
 
 
